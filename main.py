@@ -1,58 +1,47 @@
-import telebot 
-from random import randint
+from collections import defaultdict
+import telebot
 from config import token
-from logic import Wizard
-from logic import Fighter
-from logic import Pokemon
+from logic import quiz_questions
+points = defaultdict(int)
+user_responses = {} 
 
-bot = telebot.TeleBot(token) 
+bot = telebot.TeleBot(token)
 
-@bot.message_handler(commands=['go'])
+def send_question(chat_id):
+    bot.send_message(chat_id, quiz_questions[user_responses[chat_id]].get_text, reply_markup=quiz_questions[user_responses[chat_id]].gen_markup())
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    bot.answer_callback_query(call.id)
+
+
+    if call.data == "correct":
+        bot.answer_callback_query(call.id, "КРАСАВА ТЫ ПРАВ")
+    elif call.data == "wrong":
+        bot.answer_callback_query(call.id, "ПОЧТИ ПОЧТИ НО НЕ ПРАВИЛЬНО")
+      
+    user_responses[call.message.chat.id]+=1
+    
+    if user_responses[call.message.chat.id]>=len(quiz_questions):
+        bot.send_message(call.message.chat.id, "The end")
+    else:
+        send_question(call.message.chat.id)
+
+    if call.data == "correct":
+        points[call.message.chat.id] += 1
+    if user_responses[call.message.chat.id] >= len(quiz_questions):
+        bot.send_message(
+        call.message.chat.id,
+        f"Игра окончена! Очки: {points[call.message.chat.id]}"
+    )
+
+
+@bot.message_handler(commands=['start'])
 def start(message):
-    if message.from_user.username not in Pokemon.pokemons.keys():
-        chance = randint(1,3)
-        if chance == 1:
-            pokemon = Pokemon(message.from_user.username)
-        elif chance == 2:
-            pokemon = Wizard(message.from_user.username)
-        elif chance == 3:
-            pokemon = Fighter(message.from_user.username)
-        bot.send_message(message.chat.id, pokemon.info())
-        bot.send_photo(message.chat.id, pokemon.show_img())
-    else:
-        bot.reply_to(message, "Ты уже создал себе покемона")
-
-@bot.message_handler(commands=['attack'])
-def attack_pok(message):
-    if message.reply_to_message:
-        if message.reply_to_message.from_user.username in Pokemon.pokemons.keys() and message.from_user.username in Pokemon.pokemons.keys():
-            enemy = Pokemon.pokemons[message.reply_to_message.from_user.username]
-            pok = Pokemon.pokemons[message.from_user.username]
-            res = pok.attack(enemy)
-            bot.send_message(message.chat.id, res)
-        else:
-            bot.send_message(message.chat.id, "Сражаться можно только с покемонами")
-    else:
-            bot.send_message(message.chat.id, "Чтобы атаковать, нужно ответить на сообщения того, кого хочешь атаковать")
-
-@bot.message_handler(commands=['info'])
-def info_pok(message):
-    if message.from_user.username in Pokemon.pokemons.keys():
-        pok = Pokemon.pokemons[message.from_user.username]
-        bot.send_message(message.chat.id, pok.info())
-        bot.send_photo(message.chat.id, pok.show_img())
-    else:
-        bot.reply_to(message, "У тебя еще нет покемона. Напиши /go")
-
-@bot.message_handler(commands=['feed'])
-def feed_pok(message):
-    if message.from_user.username in Pokemon.pokemons.keys():
-        pok = Pokemon.pokemons[message.from_user.username]
-        res = pok.feed()
-        bot.send_message(message.chat.id, res)
-    else:
-        bot.send_message(message.chat.id, "нельзя кормить покемона которого нет")
+    if message.chat.id not in user_responses.keys():
+        user_responses[message.chat.id] = 0
+        send_question(message.chat.id)
 
 
-bot.infinity_polling(none_stop=True)
+bot.infinity_polling()
 
